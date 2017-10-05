@@ -1,11 +1,6 @@
 #ifndef _LIBBIRB_UNROLLED_LIST_H
 #define _LIBBIRB_UNROLLED_LIST_H
 
-#include <stdlib.h>
-#include <string.h>
-#include <stdio.h>
-#include <assert.h>
-
 // MUST BE EVEN
 #ifndef LIST_NODE_CAPACITY
 #define LIST_NODE_CAPACITY 16

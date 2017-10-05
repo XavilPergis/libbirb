@@ -1,5 +1,10 @@
 #include "./unrolled_list.h"
 
+#include <stdlib.h>
+#include <string.h>
+#include <stdio.h>
+#include <assert.h>
+
 int list_new(struct unrolled_list *list)
 {
     struct list_node *head = malloc(sizeof(struct list_node));
