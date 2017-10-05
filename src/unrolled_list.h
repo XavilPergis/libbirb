@@ -1,6 +1,8 @@
 #ifndef _LIBBIRB_UNROLLED_LIST_H
 #define _LIBBIRB_UNROLLED_LIST_H
 
+#include <stdlib.h>
+
 // MUST BE EVEN
 #ifndef LIST_NODE_CAPACITY
 #define LIST_NODE_CAPACITY 16
@@ -24,13 +26,19 @@ struct list_node
     LIST_DATA_TYPE data[LIST_NODE_CAPACITY];
 };
 
-int list_new(struct unrolled_list *list);
+struct unrolled_list *list_new(void);
 void list_free(struct unrolled_list *list);
 
 int list_insert(struct unrolled_list *list, size_t place, LIST_DATA_TYPE item);
-LIST_DATA_TYPE list_get(struct unrolled_list *list, size_t place);
+LIST_DATA_TYPE list_get(const struct unrolled_list *list, size_t place);
 void list_remove(struct unrolled_list *list, size_t place);
 
 void list_print(struct unrolled_list *list);
+
+static int insert_new_node(struct list_node *node);
+static void split_nodes(struct list_node *src, struct list_node *dst);
+static void node_shift_elements(struct list_node *node, size_t offset);
+static LIST_DATA_TYPE *insert_point(struct list_node *node, size_t place);
+static struct list_node *find_node(const struct unrolled_list *list, size_t place, size_t *node_offset);
 
 #endif

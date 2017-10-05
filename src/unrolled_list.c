@@ -5,18 +5,22 @@
 #include <stdio.h>
 #include <assert.h>
 
-int list_new(struct unrolled_list *list)
+struct unrolled_list *list_new(void)
 {
-    struct list_node *head = malloc(sizeof(struct list_node));
+    struct unrolled_list *list = malloc(sizeof(struct unrolled_list));
     if (!list)
-        return 1;
+        return NULL;
+
+    struct list_node *head = malloc(sizeof(struct list_node));
+    if (!head)
+        return NULL;
 
     head->next = NULL;
     head->count = 0;
     list->count = 0;
     list->head = head;
 
-    return 0;
+    return list;
 }
 
 void list_free(struct unrolled_list *list)
@@ -31,6 +35,9 @@ void list_free(struct unrolled_list *list)
         free(current);
         current = next;
     }
+
+    // Then free the container
+    free(list);
 }
 
 int list_insert(struct unrolled_list *list, size_t place, LIST_DATA_TYPE item)
@@ -51,7 +58,7 @@ int list_insert(struct unrolled_list *list, size_t place, LIST_DATA_TYPE item)
     return 0;
 }
 
-LIST_DATA_TYPE list_get(struct unrolled_list *list, size_t place)
+LIST_DATA_TYPE list_get(const struct unrolled_list *list, size_t place)
 {
     size_t node_offset = 0;
 
@@ -62,17 +69,6 @@ LIST_DATA_TYPE list_get(struct unrolled_list *list, size_t place)
     
     // Instead of setting an item here, we just pull it out of the node's array
     return node->data[node_offset];
-}
-
-static void debug_print_node(struct list_node *node)
-{
-    if (!node)
-        return;
-
-    printf("%p: <next=%p, count=%zu, data=[", node, node->next, node->count);
-    print_seq(node->data, LIST_NODE_CAPACITY);
-    printf("]>\nActual: ");
-    print_seq(node->data, node->count);
 }
 
 static void print_seq(int *data, size_t length)
@@ -88,11 +84,22 @@ static void print_seq(int *data, size_t length)
     printf("]\n");
 }
 
+static void debug_print_node(struct list_node *node)
+{
+    if (!node)
+        return;
+
+    printf("%p: <next=%p, count=%zu, data=[", node, node->next, node->count);
+    print_seq(node->data, LIST_NODE_CAPACITY);
+    printf("]>\nActual: ");
+    print_seq(node->data, node->count);
+}
+
 void list_print(struct unrolled_list *list)
 {
     if (!list)
         return;
-    struct list_node *node = list;
+    struct list_node *node = list->head;
     printf("[");
     while (node)
     {
@@ -183,12 +190,12 @@ static LIST_DATA_TYPE *insert_point(struct list_node *node, size_t place)
 
 // @PRE: PLACE must be an element within the list, or at the beginning/end
 // @POST: OBSERVED_COUNT will be aligned to the beginning of the node
-static struct list_node *find_node(struct unrolled_list *list, size_t place, size_t *node_offset)
+static struct list_node *find_node(const struct unrolled_list *list, size_t place, size_t *node_offset)
 {
     size_t total = 0;
     if (!list)
         return NULL;
-    struct list_node *current = list;
+    struct list_node *current = list->head;
     while (1)
     {
         // If the index is inside the range for a node, return that node
