@@ -20,6 +20,8 @@ void list_free(struct unrolled_list *list)
 
     while (current)
     {
+        // Need to make sure that we don't free the memory from under us and
+        // *then* try to get the next node
         struct list_node *next = current->next;
         free(current);
         current = next;
@@ -28,15 +30,15 @@ void list_free(struct unrolled_list *list)
 
 int list_insert(struct unrolled_list *list, size_t place, LIST_DATA_TYPE item)
 {
-    size_t prev_nodes_count = 0;
+    size_t node_offset = 0;
 
     // Find the node the index we want is in
-    struct list_node *node = find_node(list, place, &prev_nodes_count);
+    struct list_node *node = find_node(list, place, &node_offset);
     if (!node)
         return 2;
 
     // Get the point of insertion, shifting elements and allocating new nodes if need be
-    LIST_DATA_TYPE *insert_at = insert_point(node, place - prev_nodes_count);
+    LIST_DATA_TYPE *insert_at = insert_point(node, node_offset);
     if (!insert_point)
         return 1;
 
@@ -44,8 +46,18 @@ int list_insert(struct unrolled_list *list, size_t place, LIST_DATA_TYPE item)
     return 0;
 }
 
-LIST_DATA_TYPE list_get(struct unrolled_list *list, size_t place);
-void list_remove(struct unrolled_list *list, size_t place);
+LIST_DATA_TYPE list_get(struct unrolled_list *list, size_t place)
+{
+    size_t node_offset = 0;
+
+    // Find the right node
+    struct list_node *node = find_node(list, place, &node_offset);
+    if (!node)
+        return 2;
+    
+    // Instead of setting an item here, we just pull it out of the node's array
+    return node->data[node_offset];
+}
 
 static void debug_print_node(struct list_node *node)
 {
@@ -97,7 +109,7 @@ static int insert_new_node(struct list_node *node)
     if (!new_node)
         return 1;
 
-    // leave data uninitialized
+    // We don't need to initialized node->data
     new_node->count = 0;
     new_node->next = node->next;
     node->next = new_node;
@@ -128,7 +140,8 @@ static LIST_DATA_TYPE *insert_point(struct list_node *node, size_t place)
         return NULL;
 
     if (node->count != LIST_NODE_CAPACITY)
-    {
+    {   
+        // We still have space in node->data, so we can just shift the contents over one
         node_shift_elements(node, place);
         return &node->data[place];
     }
@@ -140,16 +153,22 @@ static LIST_DATA_TYPE *insert_point(struct list_node *node, size_t place)
         int status = insert_new_node(node);
         if (!status)
             return NULL;
+        
+        // Copy the top half of this node into the bottom of the next
         split_nodes(node, node->next);
 
+        // Since the data is now split across two nodes, we have to check which node our
+        // data needs to be inserted into
         if (in_first_half)
         {
+            // The bottom half stays aligned to 0, so PLACE still points where we need it to
             node_shift_elements(node, place);
             return &node->data[place];
         }
         else
         {
-            assert(place >= LIST_NODE_CAPACITY / 2);
+            // PLACE is now half a node too high, since we shifted data starting
+            // from the half-way point back to 0, so we need to compensate for the shift
             size_t new_place = place - (LIST_NODE_CAPACITY / 2);
             node_shift_elements(node->next, new_place);
             return &node->next->data[new_place];
@@ -158,8 +177,8 @@ static LIST_DATA_TYPE *insert_point(struct list_node *node, size_t place)
 }
 
 // @PRE: PLACE must be an element within the list, or at the beginning/end
-// @POST: OBSERVED_COUNT will be aligned to entire nodes
-static struct list_node *find_node(struct unrolled_list *list, size_t place, size_t *observed_count)
+// @POST: OBSERVED_COUNT will be aligned to the beginning of the node
+static struct list_node *find_node(struct unrolled_list *list, size_t place, size_t *node_offset)
 {
     size_t total = 0;
     if (!list)
@@ -167,13 +186,16 @@ static struct list_node *find_node(struct unrolled_list *list, size_t place, siz
     struct list_node *current = list;
     while (1)
     {
+        // If the index is inside the range for a node, return that node
+        // Otherwise, add the count to the total visited and crawl the list
         if (total <= place && place <= total + current->count)
         {
-            *observed_count = total;
+            *node_offset = place - total;
             return current;
         }
         else
         {
+            // Oh no! we've reached the end of the list without ever finding the node!
             if (!current->next)
                 return NULL;
             total += current->count;

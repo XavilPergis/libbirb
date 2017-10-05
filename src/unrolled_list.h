@@ -36,4 +36,6 @@ int list_insert(struct unrolled_list *list, size_t place, LIST_DATA_TYPE item);
 LIST_DATA_TYPE list_get(struct unrolled_list *list, size_t place);
 void list_remove(struct unrolled_list *list, size_t place);
 
+void list_print(struct unrolled_list *list);
+
 #endif
