@@ -1,4 +1,6 @@
-#include "./unrolled_list.c"
+#include "./src/unrolled_list.h"
+#include <stdio.h>
+#include <stdlib.h>
 
 int main(int argc, char **argv)
 {
@@ -15,18 +17,26 @@ int main(int argc, char **argv)
                 insert_index = rand() % list->count;
             else
                 insert_index = 0;
-            int status = list_insert(list, i, i*j);
+
+            int status = list_insert(list, insert_index, i*j);
             if (status) {
-                printf("Failed at index: %i, list->count = %zu", insert_index, list->count);
+                printf("Failed at index: %i, list->count = %zu\n", insert_index, list->count);
+                printf("Status: %i\n", status);
                 list_free(list);
                 return 1;
             }
         }
     }
 
-    printf("Program gets to here");
-
     list_print(list);
+
+    for (int i = 0; i < list->count / 10; i += 10)
+    {
+        printf("list[%i] = %i\n", i, list_get(list, i, NULL));
+    }
+
+    int get_status = 0;
+    list_get(list, 999, &get_status);
 
     return 0;
 }

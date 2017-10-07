@@ -40,65 +40,53 @@ void list_free(struct unrolled_list *list)
     free(list);
 }
 
+int list_remove(struct unrolled_list *list, size_t place)
+{
+    return 1;
+}
+
 int list_insert(struct unrolled_list *list, size_t place, LIST_DATA_TYPE item)
 {
     size_t node_offset = 0;
 
+    if (place > list->count)
+        return LIST_INDEX_OUT_OF_BOUNDS;
+
     // Find the node the index we want is in
     struct list_node *node = find_node(list, place, &node_offset);
     if (!node)
-        return 2;
+        return LIST_NO_NODE_FOUND;
 
     // Get the point of insertion, shifting elements and allocating new nodes if need be
-    LIST_DATA_TYPE *insert_at = insert_point(node, node_offset);
-    if (!insert_point)
-        return 1;
+    LIST_DATA_TYPE *insert_at = insert_point(list, node, node_offset);
+    if (!insert_at)
+        return LIST_ALLOCATION_FAILURE;
 
     *insert_at = item;
     return 0;
 }
 
-LIST_DATA_TYPE list_get(const struct unrolled_list *list, size_t place)
+// Neither LIST not ITEM can be null
+int list_get(const struct unrolled_list *list, size_t index, LIST_DATA_TYPE *item)
 {
     size_t node_offset = 0;
 
+    if (index > list->count)
+        return LIST_INDEX_OUT_OF_BOUNDS;
+
     // Find the right node
-    struct list_node *node = find_node(list, place, &node_offset);
+    struct list_node *node = find_node(list, index, &node_offset);
     if (!node)
-        return 2;
-    
+        return LIST_NO_NODE_FOUND;
+
     // Instead of setting an item here, we just pull it out of the node's array
-    return node->data[node_offset];
-}
+    *item = node->data[node_offset];
 
-static void print_seq(int *data, size_t length)
-{
-    printf("[");
-    for (size_t i = 0; i < length; i++)
-    {
-        if (i == length - 1)
-            printf("%i", data[i]);
-        else
-            printf("%i ", data[i]);
-    }
-    printf("]\n");
-}
-
-static void debug_print_node(struct list_node *node)
-{
-    if (!node)
-        return;
-
-    printf("%p: <next=%p, count=%zu, data=[", node, node->next, node->count);
-    print_seq(node->data, LIST_NODE_CAPACITY);
-    printf("]>\nActual: ");
-    print_seq(node->data, node->count);
+    return 0;
 }
 
 void list_print(struct unrolled_list *list)
 {
-    if (!list)
-        return;
     struct list_node *node = list->head;
     printf("[");
     while (node)
@@ -119,8 +107,8 @@ static int insert_new_node(struct list_node *node)
 {
     struct list_node *new_node = malloc(sizeof(struct list_node));
     if (!new_node)
-        return 1;
-
+        return LIST_ALLOCATION_FAILURE;
+    
     // We don't need to initialized node->data
     new_node->count = 0;
     new_node->next = node->next;
@@ -137,24 +125,19 @@ static void split_nodes(struct list_node *src, struct list_node *dst)
     dst->count = LIST_NODE_CAPACITY / 2;
 }
 
-// @PRE: NODE must not be at capacity
-// @PRE: OFFSET must be less than or equal to NODE's count
-static void node_shift_elements(struct list_node *node, size_t offset)
+static void node_shift_elements(struct unrolled_list *list, struct list_node *node, size_t index, int offset)
 {
-    assert(offset + 1 <= LIST_NODE_CAPACITY);
-    memmove(&node->data[offset + 1], &node->data[offset], sizeof(LIST_DATA_TYPE) * node->count);
+    memmove(&node->data[index + offset], &node->data[index], sizeof(LIST_DATA_TYPE) * (node->count - index));
     node->count++;
+    list->count++;
 }
 
-static LIST_DATA_TYPE *insert_point(struct list_node *node, size_t place)
+static LIST_DATA_TYPE *insert_point(struct unrolled_list *list, struct list_node *node, size_t place)
 {
-    if (!node)
-        return NULL;
-
     if (node->count != LIST_NODE_CAPACITY)
-    {   
+    {
         // We still have space in node->data, so we can just shift the contents over one
-        node_shift_elements(node, place);
+        node_shift_elements(list, node, place, 1);
         return &node->data[place];
     }
     else
@@ -163,9 +146,9 @@ static LIST_DATA_TYPE *insert_point(struct list_node *node, size_t place)
 
         // We can use node->next because we always populate it here
         int status = insert_new_node(node);
-        if (!status)
+        if (status)
             return NULL;
-        
+
         // Copy the top half of this node into the bottom of the next
         split_nodes(node, node->next);
 
@@ -174,7 +157,7 @@ static LIST_DATA_TYPE *insert_point(struct list_node *node, size_t place)
         if (in_first_half)
         {
             // The bottom half stays aligned to 0, so PLACE still points where we need it to
-            node_shift_elements(node, place);
+            node_shift_elements(list, node, place, 1);
             return &node->data[place];
         }
         else
@@ -182,7 +165,7 @@ static LIST_DATA_TYPE *insert_point(struct list_node *node, size_t place)
             // PLACE is now half a node too high, since we shifted data starting
             // from the half-way point back to 0, so we need to compensate for the shift
             size_t new_place = place - (LIST_NODE_CAPACITY / 2);
-            node_shift_elements(node->next, new_place);
+            node_shift_elements(list, node->next, new_place, 1);
             return &node->next->data[new_place];
         }
     }
@@ -193,8 +176,6 @@ static LIST_DATA_TYPE *insert_point(struct list_node *node, size_t place)
 static struct list_node *find_node(const struct unrolled_list *list, size_t place, size_t *node_offset)
 {
     size_t total = 0;
-    if (!list)
-        return NULL;
     struct list_node *current = list->head;
     while (1)
     {
@@ -214,4 +195,48 @@ static struct list_node *find_node(const struct unrolled_list *list, size_t plac
             current = current->next;
         }
     }
+}
+
+// ----- DEBUG / PRINTING -----
+
+static void print_seq(const int *data, size_t length)
+{
+    printf("[");
+    for (size_t i = 0; i < length; i++)
+    {
+        if (i == length - 1)
+            printf("%i", data[i]);
+        else
+            printf("%i ", data[i]);
+    }
+    printf("]");
+}
+
+static void debug_print_node(const struct list_node *node)
+{
+    printf("%p: <node next=%p, count=%zu, data=[", node, node->next, node->count);
+    print_seq(node->data, LIST_NODE_CAPACITY);
+    printf("]>\nActual: ");
+    print_seq(node->data, node->count);
+    printf("\n");
+}
+
+static void debug_print_list(const struct unrolled_list *list)
+{
+    const struct list_node *current = list->head;
+    size_t which = 0;
+
+    printf("%p: <list count=%zu,nodes=[\n", list, list->count);
+
+    while (current)
+    {
+        printf("\t%zu ", which);
+        printf("%p: <node next=%p, count=%zu, data=", current, current->next, current->count);
+        print_seq(current->data, current->count);
+        printf(">\n");
+        which++;
+        current = current->next;
+    }
+
+    printf("]>\n");
 }
