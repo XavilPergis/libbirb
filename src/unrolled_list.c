@@ -113,7 +113,7 @@ int list_insert(struct unrolled_list *list, size_t place, LIST_DATA_TYPE item)
     return 0;
 }
 
-// Neither LIST not ITEM can be null
+// Neither LIST nor ITEM can be null
 int list_get(const struct unrolled_list *list, size_t index, LIST_DATA_TYPE *item)
 {
     size_t node_offset = 0;
