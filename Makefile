@@ -4,17 +4,17 @@ MAIN=main.c
 
 LIB_NAME=libbirb
 
-CFLAGS=
+CFLAGS=-g
 LDFLAGS=
 
 obj/%.o: src/%.c
 	clang $(CFLAGS) -c -o $@ $<
 
-libbirb: $(OBJECTS)
-	clang -shared -fPIC -o $(LIB_NAME).so $^
+build: $(OBJECTS)
+	clang $(CFLAGS) -shared -fPIC -o $(LIB_NAME).so $^
 
 run: $(OBJECTS)
-	clang $(MAIN) $^
+	clang $(CFLAGS) $(MAIN) $^
 	./a.out
 
-.PHONY: run
+.PHONY: run build

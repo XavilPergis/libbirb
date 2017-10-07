@@ -41,8 +41,10 @@ void list_print(struct unrolled_list *list);
 
 static int insert_new_node(struct list_node *node);
 static void split_nodes(struct list_node *src, struct list_node *dst);
-static void node_shift_elements(struct unrolled_list *list, struct list_node *node, size_t index, int offset);
+static void node_shift_elements_forwards(struct unrolled_list *list, struct list_node *node, size_t index);
+static void node_shift_elements_backwards(struct unrolled_list *list, struct list_node *node, size_t index);
 static LIST_DATA_TYPE *insert_point(struct unrolled_list *list, struct list_node *node, size_t place);
 static struct list_node *find_node(const struct unrolled_list *list, size_t place, size_t *node_offset);
+void debug_print_list(const struct unrolled_list *list);
 
 #endif

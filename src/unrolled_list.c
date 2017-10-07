@@ -40,9 +40,56 @@ void list_free(struct unrolled_list *list)
     free(list);
 }
 
+static void shift_items_back(struct unrolled_list *list, struct list_node *node, size_t index)
+{
+    memmove(&node->data[index], &node->data[index + 1], sizeof(LIST_DATA_TYPE) * (node->count - index));
+    node->count--;
+    list->count--;
+}
+
+static void remove_node(struct list_node *to_remove, struct list_node *previous)
+{
+    previous->next = to_remove->next;
+    free(to_remove);
+}
+
+static void try_concat_node(struct list_node *src, struct list_node *dst)
+{
+    // If the remove point is in the last node in the list, we just return because
+    // there is no next node to combine with.
+    if (!src)
+        return;
+
+    // All or nothing
+    if (src->count + dst->count <= LIST_NODE_CAPACITY)
+    {
+        memcpy(&dst->data[dst->count], src->data, sizeof(LIST_DATA_TYPE) * src->count);
+        dst->count += src->count;
+        remove_node(src, dst);
+    }
+
+}
+
 int list_remove(struct unrolled_list *list, size_t place)
 {
-    return 1;
+    size_t node_offset = 0;
+
+    // Shifting items would underflow out data buffer if there is in the node
+    if (!list->count)
+        return LIST_INDEX_OUT_OF_BOUNDS;
+
+    struct list_node *node = find_node(list, place, &node_offset);
+
+    // Copy items back, decrementing count
+    shift_items_back(list, node, node_offset);
+
+    // We don't need to check for empty nodes explicitly, because any node that has been emptied
+    // will have LIST_NODE_CAPACITY slots free, so even full nodes can be copied in.
+    // TODO: optimization to remove empty node instead of copying data?
+    if (node->count < LIST_NODE_CAPACITY / 2)
+        try_concat_node(node->next, node);
+    
+    return 0;
 }
 
 int list_insert(struct unrolled_list *list, size_t place, LIST_DATA_TYPE item)
@@ -125,9 +172,9 @@ static void split_nodes(struct list_node *src, struct list_node *dst)
     dst->count = LIST_NODE_CAPACITY / 2;
 }
 
-static void node_shift_elements(struct unrolled_list *list, struct list_node *node, size_t index, int offset)
+static void shift_items_forward(struct unrolled_list *list, struct list_node *node, size_t index)
 {
-    memmove(&node->data[index + offset], &node->data[index], sizeof(LIST_DATA_TYPE) * (node->count - index));
+    memmove(&node->data[index + 1], &node->data[index], sizeof(LIST_DATA_TYPE) * (node->count - index));
     node->count++;
     list->count++;
 }
@@ -137,7 +184,7 @@ static LIST_DATA_TYPE *insert_point(struct unrolled_list *list, struct list_node
     if (node->count != LIST_NODE_CAPACITY)
     {
         // We still have space in node->data, so we can just shift the contents over one
-        node_shift_elements(list, node, place, 1);
+        shift_items_forward(list, node, place);
         return &node->data[place];
     }
     else
@@ -157,7 +204,7 @@ static LIST_DATA_TYPE *insert_point(struct unrolled_list *list, struct list_node
         if (in_first_half)
         {
             // The bottom half stays aligned to 0, so PLACE still points where we need it to
-            node_shift_elements(list, node, place, 1);
+            shift_items_forward(list, node, place);
             return &node->data[place];
         }
         else
@@ -165,7 +212,7 @@ static LIST_DATA_TYPE *insert_point(struct unrolled_list *list, struct list_node
             // PLACE is now half a node too high, since we shifted data starting
             // from the half-way point back to 0, so we need to compensate for the shift
             size_t new_place = place - (LIST_NODE_CAPACITY / 2);
-            node_shift_elements(list, node->next, new_place, 1);
+            shift_items_forward(list, node->next, new_place);
             return &node->next->data[new_place];
         }
     }
@@ -221,17 +268,17 @@ static void debug_print_node(const struct list_node *node)
     printf("\n");
 }
 
-static void debug_print_list(const struct unrolled_list *list)
+void debug_print_list(const struct unrolled_list *list)
 {
     const struct list_node *current = list->head;
     size_t which = 0;
 
-    printf("%p: <list count=%zu,nodes=[\n", list, list->count);
+    printf("%p: <list count=%zu, nodes=[\n", list, list->count);
 
     while (current)
     {
         printf("\t%zu ", which);
-        printf("%p: <node next=%p, count=%zu, data=", current, current->next, current->count);
+        printf("%p:\t<node next=%p,\tcount=%zu,\tdata=", current, current->next, current->count);
         print_seq(current->data, current->count);
         printf(">\n");
         which++;
